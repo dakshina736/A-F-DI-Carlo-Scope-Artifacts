@@ -1,686 +1,622 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>A&F Di Carlo — Platform Scope</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --navy: #0A1628;
-    --blue: #1A56DB;
-    --frost: #93C5FD;
-    --muted: #64748B;
-    --white: #FFFFFF;
-    --amber: #F59E0B;
-    --green: #10B981;
-    --orange: #F97316;
-    --orange-frost: #FED7AA;
-    --border: rgba(147,197,253,0.2);
-    --border-summer: rgba(249,115,22,0.2);
-  }
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Toronto Snow Fleet Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:     #0d1117;
+      --panel:  #161b22;
+      --border: #30363d;
+      --accent: #e36b2d;
+      --green:  #3fb950;
+      --yellow: #d29922;
+      --red:    #f85149;
+      --blue:   #58a6ff;
+      --text:   #e6edf3;
+      --muted:  #8b949e;
+      --mono:   'IBM Plex Mono', monospace;
+      --sans:   'IBM Plex Sans', sans-serif;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 52px 1fr;
+      grid-template-columns: 320px 1fr;
+      grid-template-areas: "header header" "sidebar map";
+      overflow: hidden;
+    }
 
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--navy);
-    color: var(--white);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+    /* HEADER */
+    #header {
+      grid-area: header;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 20px; gap: 14px; z-index: 9999;
+    }
+    #header .logo { font-size: 1.5rem; }
+    #header h1 {
+      font-family: var(--mono); font-size: .9rem;
+      font-weight: 700; letter-spacing: 2px;
+      color: var(--accent); text-transform: uppercase;
+    }
+    #header .sub { font-size: .68rem; color: var(--muted); letter-spacing: 1px; margin-left: 4px; }
+    .live-badge {
+      margin-left: auto; display: flex; align-items: center;
+      gap: 7px; font-family: var(--mono); font-size: .68rem;
+      color: var(--green); letter-spacing: 1px;
+    }
+    .live-dot {
+      width:8px; height:8px; border-radius:50%; background:var(--green);
+      animation: livepulse 1.4s infinite;
+    }
+    @keyframes livepulse {
+      0%,100%{ opacity:1; box-shadow:0 0 0 0 rgba(63,185,80,.6); }
+      50%    { opacity:.5; box-shadow:0 0 0 5px rgba(63,185,80,0); }
+    }
+    #poll-timer { font-family:var(--mono); font-size:.65rem; color:var(--muted); margin-left:16px; }
 
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse 80% 50% at 20% 0%, rgba(26,86,219,0.12) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(147,197,253,0.06) 0%, transparent 60%);
-    pointer-events: none;
-    z-index: 0;
-  }
+    /* SIDEBAR */
+    #sidebar {
+      grid-area: sidebar; background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .sidebar-head { padding:14px 16px 10px; border-bottom:1px solid var(--border); flex-shrink:0; }
+    .sidebar-head h2 { font-family:var(--mono); font-size:.72rem; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+    .fleet-stats { display:flex; gap:10px; margin-top:10px; }
+    .fstat { flex:1; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 10px; text-align:center; }
+    .fstat .val { font-family:var(--mono); font-size:1.1rem; font-weight:700; }
+    .fstat .lbl { font-size:.58rem; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-top:2px; }
+    .fstat.available .val { color:var(--green); }
+    .fstat.busy      .val { color:var(--yellow); }
+    .fstat.full      .val { color:var(--red); }
 
-  .page {
-    position: relative;
-    z-index: 1;
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 60px 40px;
-  }
+    #truck-list { flex:1; overflow-y:auto; padding:8px; }
+    #truck-list::-webkit-scrollbar { width:4px; }
+    #truck-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
 
-  /* HEADER */
-  .header {
-    margin-bottom: 36px;
-    padding-bottom: 28px;
-    border-bottom: 1px solid var(--border);
-  }
+    .truck-card {
+      background:var(--bg); border:1px solid var(--border); border-radius:8px;
+      padding:10px 12px; margin-bottom:6px; cursor:pointer;
+      transition:border-color .15s, background .15s;
+      display:flex; align-items:center; gap:10px;
+    }
+    .truck-card:hover  { border-color:var(--accent); }
+    .truck-card.active { border-color:var(--accent); background:#1c1f24; }
+    .truck-avatar { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.3rem; flex-shrink:0; }
+    .truck-info { flex:1; min-width:0; }
+    .truck-id { font-family:var(--mono); font-size:.78rem; font-weight:700; color:var(--text); }
+    .truck-street { font-size:.65rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+    .truck-right { text-align:right; flex-shrink:0; }
+    .speed-val { font-family:var(--mono); font-size:.85rem; font-weight:600; color:var(--blue); }
+    .speed-unit { font-size:.55rem; color:var(--muted); }
+    .status-pill { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.58rem; font-weight:600; letter-spacing:.5px; text-transform:uppercase; margin-top:4px; }
+    .pill-available { background:rgba(63,185,80,.15);  color:var(--green); }
+    .pill-busy      { background:rgba(210,153,34,.15); color:var(--yellow); }
+    .pill-full      { background:rgba(248,81,73,.15);  color:var(--red); }
 
-  .pre-tag {
-    display: inline-block;
-    background: rgba(26,86,219,0.3);
-    border: 1px solid rgba(26,86,219,0.5);
-    color: var(--frost);
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    padding: 3px 10px;
-    border-radius: 20px;
-    margin-bottom: 12px;
-  }
+    /* MAP */
+    #map { grid-area:map; }
 
-  h1 {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 40px;
-    font-weight: 500;
-    line-height: 1.2;
-    letter-spacing: -0.01em;
-    margin-bottom: 8px;
-  }
+    /* Loading overlay */
+    #loading-overlay {
+      position: fixed; inset: 0; background: rgba(13,17,23,0.92);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 99999; gap: 16px;
+    }
+    #loading-overlay h2 { font-family:var(--mono); font-size:1rem; color:var(--accent); letter-spacing:2px; }
+    #loading-bar-wrap { width:320px; height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+    #loading-bar { height:100%; background:var(--accent); width:0%; transition:width .3s; border-radius:3px; }
+    #loading-status { font-family:var(--mono); font-size:.7rem; color:var(--muted); letter-spacing:1px; }
 
-  .accent-blue { color: var(--frost); }
+    /* Popup */
+    .leaflet-popup-content-wrapper {
+      background:var(--panel) !important; border:1px solid var(--border) !important;
+      border-radius:10px !important; box-shadow:0 8px 32px rgba(0,0,0,.6) !important;
+      color:var(--text) !important; padding:0 !important;
+    }
+    .leaflet-popup-tip { background:var(--panel) !important; }
+    .leaflet-popup-content { margin:0 !important; }
+    .popup-inner { padding:14px 16px; min-width:200px; }
+    .popup-header { display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid var(--border); margin-bottom:10px; }
+    .popup-icon { font-size:1.6rem; }
+    .popup-id { font-family:var(--mono); font-size:.9rem; font-weight:700; }
+    .popup-rows { display:flex; flex-direction:column; gap:6px; }
+    .popup-row { display:flex; justify-content:space-between; align-items:center; font-size:.72rem; }
+    .popup-label { color:var(--muted); letter-spacing:.5px; }
+    .popup-value { font-family:var(--mono); font-weight:600; color:var(--text); }
+    .popup-value.spd { color:var(--blue); }
 
-  .subtitle {
-    color: var(--muted);
-    font-size: 16px;
-    font-weight: 300;
-    max-width: 600px;
-    line-height: 1.6;
-  }
+    /* Truck marker */
+    .truck-marker-wrap { display:flex; flex-direction:column; align-items:center; }
+    .truck-dot {
+      width:34px; height:34px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.1rem; border:2px solid; transition:transform .15s;
+    }
+    .truck-label {
+      font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:700;
+      padding:1px 5px; border-radius:3px; margin-top:2px;
+      white-space:nowrap; letter-spacing:.5px;
+      background:rgba(13,17,23,0.85);
+    }
 
-  .client-name {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 18px;
-    font-family: 'Syne', sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--frost);
-    flex-shrink: 0;
-  }
-
-  /* TABS */
-  .season-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 36px;
-  }
-
-  .tab {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 32px;
-    border-radius: 10px;
-    font-family: 'Syne', sans-serif;
-    font-size: 15px;
-    font-weight: 700;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: all 0.2s;
-    user-select: none;
-  }
-
-  .tab-winter {
-    background: rgba(26,86,219,0.2);
-    border-color: rgba(26,86,219,0.4);
-    color: var(--frost);
-  }
-  .tab-winter.active {
-    background: rgba(26,86,219,0.4);
-    border-color: var(--frost);
-    color: #fff;
-  }
-
-  .tab-summer {
-    background: rgba(249,115,22,0.12);
-    border-color: rgba(249,115,22,0.3);
-    color: var(--orange-frost);
-  }
-  .tab-summer.active {
-    background: rgba(249,115,22,0.3);
-    border-color: var(--orange-frost);
-    color: #fff;
-  }
-
-  /* PANELS */
-  .season-panel { display: none; }
-  .season-panel.active { display: block; }
-
-  /* SECTION HEADERS */
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-    margin-top: 36px;
-  }
-  .section-header:first-of-type { margin-top: 0; }
-
-  .section-icon {
-    width: 42px; height: 42px;
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px;
-    flex-shrink: 0;
-  }
-
-  .icon-blue   { background: rgba(26,86,219,0.3);  border: 1px solid rgba(26,86,219,0.4); }
-  .icon-green  { background: rgba(16,185,129,0.2);  border: 1px solid rgba(16,185,129,0.3); }
-  .icon-amber  { background: rgba(245,158,11,0.2);  border: 1px solid rgba(245,158,11,0.3); }
-  .icon-orange { background: rgba(249,115,22,0.2);  border: 1px solid rgba(249,115,22,0.35); }
-
-  .section-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-  }
-
-  .section-desc {
-    font-size: 13px;
-    color: var(--muted);
-    margin-left: auto;
-    font-style: italic;
-  }
-
-  /* FEATURE GRIDS */
-  .features {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 11px;
-    margin-bottom: 8px;
-  }
-  .features-2col { grid-template-columns: repeat(2, 1fr); }
-
-  .feature {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    transition: border-color 0.2s;
-  }
-  .feature:hover { border-color: rgba(147,197,253,0.4); }
-  .feature.s { border-color: var(--border-summer); }
-  .feature.s:hover { border-color: rgba(249,115,22,0.5); }
-
-  .feature-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .dot { width:8px; height:8px; border-radius:50%; background:var(--frost); flex-shrink:0; }
-  .dg  { background: var(--green)  !important; }
-  .da  { background: var(--amber)  !important; }
-  .do  { background: var(--orange) !important; }
-
-  .feature-body {
-    font-size: 14px;
-    color: var(--muted);
-    line-height: 1.7;
-  }
-
-  /* PIPELINE */
-  .pipeline {
-    display: flex;
-    align-items: stretch;
-    gap: 0;
-    margin-bottom: 28px;
-    overflow-x: auto;
-  }
-
-  .pipe-step {
-    flex: 1;
-    min-width: 180px;
-    background: rgba(249,115,22,0.07);
-    border: 1px solid rgba(249,115,22,0.22);
-    padding: 18px 16px;
-    position: relative;
-    text-align: center;
-  }
-  .pipe-step:first-child { border-radius: 10px 0 0 10px; }
-  .pipe-step:last-child  { border-radius: 0 10px 10px 0; }
-
-  .pipe-step::after {
-    content: '→';
-    position: absolute;
-    right: -13px; top: 50%;
-    transform: translateY(-50%);
-    color: var(--orange);
-    font-size: 13px;
-    z-index: 2;
-    background: var(--navy);
-    padding: 0 2px;
-  }
-  .pipe-step:last-child::after { display: none; }
-
-  .pipe-num {
-    font-family: 'Syne', sans-serif;
-    font-size: 11px; font-weight: 800;
-    color: var(--orange);
-    letter-spacing: 0.1em;
-    margin-bottom: 6px;
-  }
-  .pipe-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 13px; font-weight: 700;
-    color: var(--white);
-    margin-bottom: 6px;
-  }
-  .pipe-body {
-    font-size: 12px;
-    color: var(--muted);
-    line-height: 1.6;
-  }
-
-  .pipe-step.replaced {
-    background: rgba(239,68,68,0.07);
-    border-color: rgba(239,68,68,0.22);
-  }
-  .rbadge {
-    position: absolute; top: 6px; right: 6px;
-    background: rgba(239,68,68,0.3);
-    border: 1px solid rgba(239,68,68,0.5);
-    color: #FCA5A5;
-    font-size: 8px; font-weight: 700;
-    padding: 1px 5px; border-radius: 3px;
-    font-family: 'Syne', sans-serif;
-    letter-spacing: 0.05em;
-  }
-
-  /* INTEGRATIONS */
-  .integrations {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 11px;
-  }
-  .integrations-3col { grid-template-columns: repeat(3, 1fr); }
-
-  .integration {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 18px 20px;
-    text-align: center;
-  }
-  .integration.s { border-color: var(--border-summer); }
-
-  .integration-name {
-    font-family: 'Syne', sans-serif;
-    font-size: 14px; font-weight: 700;
-    margin-bottom: 6px;
-  }
-  .integration-desc {
-    font-size: 12px;
-    color: var(--muted);
-    line-height: 1.6;
-  }
-
-  /* DIVIDER */
-  .divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
-  .ds { border-top-color: var(--border-summer); }
-
-  /* FOOTER */
-  .footer {
-    margin-top: 44px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border);
-    font-size: 11px;
-    color: var(--muted);
-  }
-</style>
+    /* API log */
+    #api-log-wrap { border-top:1px solid var(--border); flex-shrink:0; }
+    #api-log-head { padding:6px 12px; font-family:var(--mono); font-size:.62rem; color:var(--muted); letter-spacing:1px; display:flex; align-items:center; gap:6px; }
+    #api-log { height:72px; overflow-y:auto; padding:4px 10px 8px; font-family:var(--mono); font-size:.58rem; color:var(--muted); background:#0a0d10; }
+    #api-log::-webkit-scrollbar { width:3px; }
+    #api-log::-webkit-scrollbar-thumb { background:var(--border); }
+    .log-line { line-height:1.6; }
+    .log-ts  { color:var(--green); margin-right:6px; }
+    .log-ok  { color:var(--green); }
+    .log-err { color:var(--red); }
+    .log-info{ color:var(--blue); }
+  </style>
 </head>
 <body>
-<div class="page">
 
-  <!-- HEADER -->
-  <div class="header">
-    <div>
-      <h1>A&amp;F Di Carlo Constructions<span class="accent-blue"> — Scope Document</span></h1>
-      <p class="subtitle">A unified web + mobile operations platform for A&F Di Carlo Construction — covering both winter activities and summer activities.</p>
-    </div>
-  </div>
-
-  <!-- TABS -->
-  <div class="season-tabs">
-    <div class="tab tab-winter active" onclick="switchTab('winter')">❄️ &nbsp;Winter Operations</div>
-    <div class="tab tab-summer" onclick="switchTab('summer')">☀️ &nbsp;Summer Operations</div>
-  </div>
-
-
-  <!-- ═══════════════ WINTER ═══════════════ -->
-  <div class="season-panel active" id="panel-winter">
-
-    <div class="section-header">
-      <div class="section-icon icon-blue">🖥️</div>
-      <div class="section-title">Component 1 — Web Dashboard</div>
-      <div class="section-desc">Dispatcher &amp; Supervisor facing</div>
-    </div>
-
-    <div class="features">
-      <div class="feature">
-        <div class="feature-title"><span class="dot"></span>Work Order Ingestion</div>
-        <div class="feature-body">An AWS SES email listener monitors the dispatch inbox continuously. The moment a Maximo work order email arrives from the City of Toronto, the AI parsing engine extracts every relevant field — Work Order ID, activity type, infrastructure, start time, location, and contract — and creates the work order record instantly. Zero manual entry, zero delay.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot"></span>Work Order List &amp; Detail</div>
-        <div class="feature-body">Filterable list by status, contract, activity, and date. Detail view shows full event timeline, assigned crew, field photos, route coverage map, and complete audit log.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot"></span>Deadline Auto-Calculation</div>
-        <div class="feature-body">VBA spreadsheet business rules encoded into the system once. Call-out time, activation deadline, and MOT deadline calculated automatically from activity + infrastructure type. Live colour-coded countdown timers on every active work order.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot"></span>Crew &amp; Vehicle Assignment</div>
-        <div class="feature-body">Dispatcher assigns operators and vehicles from a live availability panel. Assignment pushes instantly to operator's mobile app. Replaces manual Activity Messenger broadcasts entirely.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot"></span>Vehicle Status Board</div>
-        <div class="feature-body">Live board — all 80 vehicles showing In Yard, Deployed, Returning, or Out of Service. Departure and return times auto-logged from Geotab geofence events. No more physical gate-watching.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot"></span>Penalty Risk Calculator</div>
-        <div class="feature-body">If vehicles haven't departed by projected time, the system shows live estimated penalty exposure in dollars. Dispatcher sees the financial consequence before it happens — not after.</div>
-      </div>
-    </div>
-
-    <div class="features" style="margin-top:11px;">
-      <div class="feature">
-        <div class="feature-title"><span class="dot dg"></span>Live Fleet Map</div>
-        <div class="feature-body">Real-time GPS from Geotab API. GPS tracks drawn as route coverage — completed segments green, pending grey. Bus stop pins update live as operators submit photos from the field.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot dg"></span>Maximo Auto-Submission</div>
-        <div class="feature-body">On work order close, the system compiles the full Maximo record automatically — vehicle, times, hours, salt used, notes. Dispatcher reviews, approves, and it posts via API. No manual web entry.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot dg"></span>End of Shift Auto-Report</div>
-        <div class="feature-body">Shift handover report auto-generated from captured data — active work orders, vehicle statuses, flags, pending items. Incoming dispatcher fully briefed the moment they open the app.</div>
-      </div>
-    </div>
-    <hr class="divider">
-
-    <div class="section-header">
-      <div class="section-icon icon-green">📱</div>
-      <div class="section-title">Component 2 — Mobile Application</div>
-      <div class="section-desc">Field crew &amp; operator facing (Android)</div>
-    </div>
-
-    <div class="features">
-      <div class="feature">
-        <div class="feature-title"><span class="dot dg"></span>Availability Confirmation</div>
-        <div class="feature-body">Pre-event push notification to all operators. They confirm Available / Unavailable / Delayed in the app. Live headcount flows to dispatcher dashboard instantly — replaces manual Activity Messenger.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot dg"></span>Work Order Notification</div>
-        <div class="feature-body">When assigned, operator gets a push notification with activity type, report time, activation deadline, and route details. One tap opens the full work order in the app.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot dg"></span>Digital Route Map</div>
-        <div class="feature-body">Assigned route on interactive map. GPS shown live. Completed segments turn green. Replaces paper maps entirely. Dynamic reassignments appear instantly — no phone call needed.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot da"></span>Photo Capture — Bus Stops</div>
-        <div class="feature-body">Structured before/after photo workflow. GPS and timestamp embedded automatically at capture. Photos trigger CV classification and update the dispatcher's map in real time.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot da"></span>Salt Load Logging</div>
-        <div class="feature-body">Operator logs each salt load — quantity and location. Feeds into work order record and Maximo submission automatically. Replaces current guesstimates with actual usage data.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot da"></span>Field Notes &amp; Incidents</div>
-        <div class="feature-body">Route blockages, breakdowns, or condition notes entered in the app appear on dispatcher's dashboard instantly. Breakdowns auto-flag a potential MOT extension to the supervisor.</div>
-      </div>
-    </div>
-
-    <hr class="divider">
-
-    <div class="section-header">
-      <div class="section-icon icon-amber">🤖</div>
-      <div class="section-title">Component 3 — AI &amp; Computer Vision</div>
-      <div class="section-desc">Intelligence layer on top of the data pipeline</div>
-    </div>
-
-    <div class="features">
-      <div class="feature">
-        <div class="feature-title"><span class="dot da"></span>AWS SES — Maximo Email Parser</div>
-        <div class="feature-body">A dedicated AWS SES listener sits on the dispatch inbox. Every incoming Maximo work order email is captured automatically and passed to an LLM-based extraction engine. The AI parses the email content and outputs structured data — Work Order ID, activity type, infrastructure type, target start time, location, and contract number. No human reads or transcribes the email. The parsed record is immediately available in the dashboard for deadline calculation and crew assignment.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot da"></span>Bus Stop CV Verification</div>
-        <div class="feature-body">Before/after photo pairs auto-classified — Cleared, Partially Cleared, Obstructed, No Change. Result attached to work order as AI-generated verification. Disputes produce an instant evidence package: GPS, timestamp, CV classification.</div>
-      </div>
-      <div class="feature">
-        <div class="feature-title"><span class="dot da"></span>Dashcam Footage Store</div>
-        <div class="feature-body">SD cards from 80 vehicles batch-uploaded via a multi-slot station at the yard overnight. Each clip vectorised on ingestion — vehicle ID, timestamp, GPS, scene tags (weather, road condition, time of day), and event flags (braking, obstruction, pedestrian) stored as searchable metadata. Any clip retrieved instantly by vehicle, date, time, or location — no manual scrubbing ever.</div>
-      </div>
-    </div>
-
-    <hr class="divider">
-
-    <div class="section-header">
-      <div class="section-icon icon-blue">🔗</div>
-      <div class="section-title">Component 4 — Integration Layer</div>
-      <div class="section-desc">Connecting existing systems into one pipeline</div>
-    </div>
-
-    <div class="integrations">
-      <div class="integration">
-        <div class="integration-name">Maximo</div>
-        <div class="integration-desc">Inbound work order emails parsed. Completed records posted via API. 311 service requests pulled as work flags.</div>
-      </div>
-      <div class="integration">
-        <div class="integration-name">Geotab</div>
-        <div class="integration-desc">Geofence departure/return auto-logged. Live vehicle GPS for fleet map. Route tracks stored per work order.</div>
-      </div>
-      <div class="integration">
-        <div class="integration-name">Activity Messenger</div>
-        <div class="integration-desc">Pre-event notifications migrated to mobile push. Activity Messenger retained as fallback only.</div>
-      </div>
-      <div class="integration">
-        <div class="integration-name">Environment Canada</div>
-        <div class="integration-desc">Weather and snowfall data pulled automatically. Logged per event for analysis and model training.</div>
-      </div>
-    </div>
-
-  </div><!-- /winter -->
-
-
-  <!-- ═══════════════ SUMMER ═══════════════ -->
-  <div class="season-panel" id="panel-summer">
-
-    <!-- Current Process -->
-    <div class="section-header">
-      <div class="section-icon icon-orange">🔄</div>
-      <div class="section-title">Current Process — How It Works Today</div>
-      <div class="section-desc">Before the platform</div>
-    </div>
-
-    <div class="pipeline">
-      <div class="pipe-step">
-        <div class="pipe-num">STEP 1</div>
-        <div class="pipe-title">Ontario One Call</div>
-        <div class="pipe-body">Staff manually fill a form in the Ontario One Call portal — excavation location, area, depth, cross streets, work type.</div>
-      </div>
-      <div class="pipe-step">
-        <div class="pipe-num">STEP 2</div>
-        <div class="pipe-title">Utility Email Responses</div>
-        <div class="pipe-body">Gas, water, electricity, telecom each email back separately with clearance certificates and available dates.</div>
-      </div>
-      <div class="pipe-step replaced">
-        <div class="rbadge">REPLACED</div>
-        <div class="pipe-num">STEP 3</div>
-        <div class="pipe-title">uExcavate App</div>
-        <div class="pipe-body">Third-party app collects utility emails, consolidates certificates, and produces a ready-to-dig date. Being eradicated.</div>
-      </div>
-      <div class="pipe-step">
-        <div class="pipe-num">STEP 4</div>
-        <div class="pipe-title">Manual Work Order</div>
-        <div class="pipe-body">Staff manually create a work order with the ready-to-dig date, site details, and crew requirements.</div>
-      </div>
-      <div class="pipe-step">
-        <div class="pipe-num">STEP 5</div>
-        <div class="pipe-title">Field Execution</div>
-        <div class="pipe-body">Crews deployed. Photos taken manually. Completion by phone. Packages hand-compiled and submitted to city.</div>
-      </div>
-    </div>
-
-    <hr class="divider ds">
-
-    <!-- Component 1 Summer -->
-    <div class="section-header">
-      <div class="section-icon icon-orange">📡</div>
-      <div class="section-title">Component 1 — Locate &amp; Permit Management</div>
-      <div class="section-desc">Replaces uExcavate + manual Ontario One Call process</div>
-    </div>
-
-    <div class="features">
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Work Order Ingestion — Spreadsheet Engine</div>
-        <div class="feature-body">At the beginning of the year, a spreadsheet containing all planned excavation locations for the season is received. The spreadsheet ingestion engine parses the file automatically — extracting site addresses, cross streets, work types, and contract references. Each row becomes a site record in the system, ready for locate requests and work order creation. Zero manual data entry.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Ontario One Call Integration</div>
-        <div class="feature-body">Staff submit excavation locate requests directly from the platform — location, area, depth, cross streets entered once and submitted. No separate portal login. Each submission auto-generates a locate record linked to the site.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>AWS SES Utility Email Listener</div>
-        <div class="feature-body">A dedicated email address is configured as the utility response destination. AWS SES listens continuously. The moment any utility — gas, water, electricity, telecom — sends a clearance certificate or date response, it is captured automatically. No human monitors or sorts this inbox.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Certificate Consolidation Engine</div>
-        <div class="feature-body">Replaces uExcavate entirely. As utility responses arrive, the AI engine parses each certificate, extracts utility name, clearance status, and available dates. Once all expected utilities have responded, it calculates a single consolidated ready-to-dig start and end date — the latest start that still falls within all clearance windows.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Ready-to-Dig Dashboard</div>
-        <div class="feature-body">Every excavation site shows its locate status in real time — utilities responded, utilities pending, and overall clearance status. A green Ready badge appears only when all clearances are confirmed. Supervisors stop chasing responses manually.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Pay Duty (Police) Scheduling</div>
-        <div class="feature-body">For intersections requiring paid police duty, the platform tracks the 5-day advance request window. When a work order is created for an intersection site, it auto-flags if the window hasn't been met and prompts the supervisor to initiate the request immediately.</div>
-      </div>
-    </div>
-
-    <hr class="divider ds">
-
-    <!-- Component 2 Summer -->
-    <div class="section-header">
-      <div class="section-icon icon-orange">📋</div>
-      <div class="section-title">Component 2 — Work Order Management</div>
-      <div class="section-desc">Web dashboard — office &amp; supervisor facing</div>
-    </div>
-
-    <div class="features">
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Auto Work Order Creation</div>
-        <div class="feature-body">Once the consolidation engine confirms a ready-to-dig date, a work order is auto-generated with all site details, permit status, locate reference, utility clearance dates, and required crew types pre-populated. No manual creation needed.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Decision Tree Workflow Steps</div>
-        <div class="feature-body">Each work order follows a workflow based on site type — road repair, sidewalk, arterial, or intersection. Correct sequence auto-generated: inspection → traffic control → saw cutting → excavation → backfill → carpentry (if sidewalk) → resurfacing. Each step must be marked complete before the next unlocks.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Multi-Site Map View</div>
-        <div class="feature-body">All active worksites plotted on a city map — colour coded by status: Pending Locate, Ready to Dig, In Progress, Completed, Submitted. Operations manager gets a single visual of the entire contract area at any moment.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Crew Assignment &amp; Notification</div>
-        <div class="feature-body">Crews assigned from the same panel as winter. Each trade — traffic control, excavator, saw cutter, carpenter — assigned as a separate role within the work order. Push notifications sent to each crew member with their specific step, site address, and report time.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Submission Package Builder</div>
-        <div class="feature-body">When a site is complete, the system auto-assembles the city submission package — permit number, locate reference, all step-completion photos with GPS and timestamps, crew records, and work order details. Supervisor reviews, approves, and submits digitally. Eliminates the manual compilation lag that delays payment.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot do"></span>Weather Integration</div>
-        <div class="feature-body">Environment Canada forecasts shown against scheduled excavation days. Rain flags give supervisors advance notice to reschedule — avoiding wasted crew mobilisations and protecting open excavations from weather damage.</div>
-      </div>
-    </div>
-
-    <hr class="divider ds">
-
-    <!-- Component 3 Summer Mobile -->
-    <div class="section-header">
-      <div class="section-icon icon-green">📱</div>
-      <div class="section-title">Component 3 — Mobile Application</div>
-      <div class="section-desc">Same app as winter — summer-specific workflows added</div>
-    </div>
-
-    <div class="features">
-      <div class="feature s">
-        <div class="feature-title"><span class="dot dg"></span>Work Order &amp; Step View</div>
-        <div class="feature-body">Crew member opens their assigned work order and sees only their step — e.g., traffic control setup. They see the site on the map, any special instructions, and required photos before they can mark their step complete.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot dg"></span>Structured Photo Capture per Step</div>
-        <div class="feature-body">Each workflow step has defined required photos — e.g., traffic control requires: signage placement, road closure confirmation, site perimeter. App prompts for each in sequence. GPS and timestamp embedded automatically. Step cannot be marked complete until all photos are submitted.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot dg"></span>Site Inspection Checklist</div>
-        <div class="feature-body">Before excavation begins, inspector completes a digital checklist in the app — locate flags visible, permit posted, safety barriers in place. Result logged against the work order with timestamp and GPS.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot dg"></span>Material &amp; Equipment Logging</div>
-        <div class="feature-body">Crew logs materials used at each step — concrete, asphalt, aggregate, pipe sections. Equipment selected from the fleet list. Data populates the city submission package automatically and gives the office accurate cost tracking per site.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot dg"></span>Hazard &amp; Unexpected Find Flagging</div>
-        <div class="feature-body">Crew flags unexpected conditions — unmarked utilities, buried obstructions, structural issues — directly in the app with a photo and note. Flag appears on supervisor's dashboard immediately, creating a documented record before any decision is made.</div>
-      </div>
-      <div class="feature s">
-        <div class="feature-title"><span class="dot dg"></span>Step Completion &amp; Trade Handover</div>
-        <div class="feature-body">When a crew member marks their step complete, the next trade receives a push notification that the site is ready for them. No phone calls. The workflow advances automatically and the supervisor dashboard reflects the update in real time.</div>
-      </div>
-    </div>
-
-    <hr class="divider ds">
-
-    <!-- Component 4 Summer -->
-    <div class="section-header">
-      <div class="section-icon icon-orange">🔗</div>
-      <div class="section-title">Component 4 — Integration Layer</div>
-      <div class="section-desc">Summer-specific connections</div>
-    </div>
-
-    <div class="integrations integrations-3col">
-      <div class="integration s">
-        <div class="integration-name">Ontario One Call</div>
-        <div class="integration-desc">Locate requests submitted directly from platform. Reference numbers stored against site records. No separate portal login needed.</div>
-      </div>
-      <div class="integration s">
-        <div class="integration-name">AWS SES — Utility Inbox</div>
-        <div class="integration-desc">Replaces uExcavate. Dedicated email listener captures all utility certificate responses. AI engine consolidates into a single ready-to-dig date.</div>
-      </div>
-      <div class="integration s">
-        <div class="integration-name">Environment Canada</div>
-        <div class="integration-desc">Weather forecasts for active worksites. Rain and temperature flags shown against scheduled excavation days for proactive scheduling.</div>
-      </div>
-    </div>
-
-  </div><!-- /summer -->
-
-
-  <!-- FOOTER -->
-  <div class="footer">
-    A&F Di Carlo Construction — Unified Operations Platform Scope v1.0 &nbsp;|&nbsp; Winter & Summer Activities 
-  </div>
-
+<!-- Loading screen -->
+<div id="loading-overlay">
+  <span style="font-size:2.5rem">❄️</span>
+  <h2>LOADING REAL ROAD ROUTES</h2>
+  <div id="loading-bar-wrap"><div id="loading-bar"></div></div>
+  <div id="loading-status">Fetching routes from OSRM…</div>
 </div>
 
+<!-- HEADER -->
+<div id="header">
+  <span class="logo">❄️</span>
+  <div>
+    <h1>Snow Fleet Tracker</h1>
+    <span class="sub">Toronto, ON · Real Road Routing · OSRM</span>
+  </div>
+  <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+  <div id="poll-timer">Next update in <span id="countdown">4</span>s</div>
+</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sidebar-head">
+    <h2>Fleet Overview</h2>
+    <div class="fleet-stats">
+      <div class="fstat available"><div class="val" id="cnt-available">0</div><div class="lbl">Available</div></div>
+      <div class="fstat busy">    <div class="val" id="cnt-busy">0</div>     <div class="lbl">Busy</div></div>
+      <div class="fstat full">    <div class="val" id="cnt-full">0</div>     <div class="lbl">Full</div></div>
+    </div>
+  </div>
+  <div id="truck-list"></div>
+  <div id="api-log-wrap">
+    <div id="api-log-head">⬡ ROUTE LOG</div>
+    <div id="api-log"></div>
+  </div>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
 <script>
-  function switchTab(season) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.season-panel').forEach(p => p.classList.remove('active'));
-    document.querySelector('.tab-' + season).classList.add('active');
-    document.getElementById('panel-' + season).classList.add('active');
+// ═══════════════════════════════════════════════════════════════════════════
+//  TRUCK DEFINITIONS
+//  Each truck has named waypoints on real Toronto streets.
+//  OSRM will snap these to roads and return the full road geometry.
+// ═══════════════════════════════════════════════════════════════════════════
+const TRUCK_DEFS = [
+  {
+    id:"TRK-001", color:"#f85149", emoji:"🚛",
+    // King St W: Bathurst → Yonge
+    waypoints:[
+      [-79.40375, 43.64438],
+      [-79.39460, 43.64456],
+      [-79.38090, 43.64470],
+      [-79.37360, 43.64486],
+      [-79.36870, 43.64493],
+    ]
+  },
+  {
+    id:"TRK-002", color:"#3fb950", emoji:"🚚",
+    // Queen St W: Spadina → Yonge
+    waypoints:[
+      [-79.40080, 43.64875],
+      [-79.39290, 43.64872],
+      [-79.38100, 43.64866],
+      [-79.37610, 43.64870],
+      [-79.36840, 43.64875],
+    ]
+  },
+  {
+    id:"TRK-003", color:"#58a6ff", emoji:"🚛",
+    // Bloor St W: Ossington → Spadina
+    waypoints:[
+      [-79.42700, 43.66150],
+      [-79.41800, 43.66148],
+      [-79.40950, 43.66145],
+      [-79.40100, 43.66143],
+      [-79.39440, 43.66140],
+    ]
+  },
+  {
+    id:"TRK-004", color:"#d29922", emoji:"🚜",
+    // Spadina Ave: Bloor → King
+    waypoints:[
+      [-79.40420, 43.66600],
+      [-79.40290, 43.65800],
+      [-79.39440, 43.64860],
+      [-79.39460, 43.64456],
+    ]
+  },
+  {
+    id:"TRK-005", color:"#bc8cff", emoji:"🚛",
+    // Dundas St W: Ossington → University
+    waypoints:[
+      [-79.42650, 43.65420],
+      [-79.41400, 43.65400],
+      [-79.40300, 43.65390],
+      [-79.39200, 43.65390],
+      [-79.38820, 43.65390],
+    ]
+  },
+  {
+    id:"TRK-006", color:"#ff7b72", emoji:"🚚",
+    // College St: Dufferin → Spadina
+    waypoints:[
+      [-79.43500, 43.65610],
+      [-79.42400, 43.65600],
+      [-79.41200, 43.65590],
+      [-79.40300, 43.65580],
+      [-79.39440, 43.65570],
+    ]
+  },
+  {
+    id:"TRK-007", color:"#39d353", emoji:"🚛",
+    // Harbord St: Bathurst → Spadina
+    waypoints:[
+      [-79.41190, 43.66180],
+      [-79.40600, 43.66170],
+      [-79.40100, 43.66160],
+      [-79.39620, 43.66155],
+      [-79.39440, 43.66140],
+    ]
+  },
+  {
+    id:"TRK-008", color:"#ffa657", emoji:"🚜",
+    // King St W (west): Roncesvalles → Dufferin
+    waypoints:[
+      [-79.44900, 43.63930],
+      [-79.43800, 43.63950],
+      [-79.42800, 43.63970],
+      [-79.41500, 43.63990],
+      [-79.40900, 43.64010],
+    ]
+  },
+  {
+    id:"TRK-009", color:"#79c0ff", emoji:"🚚",
+    // Yonge St: Bloor → Dundas
+    waypoints:[
+      [-79.38685, 43.67090],
+      [-79.38700, 43.66400],
+      [-79.38710, 43.65700],
+      [-79.38720, 43.65200],
+      [-79.38730, 43.64900],
+    ]
+  },
+  {
+    id:"TRK-010", color:"#e3b341", emoji:"🚛",
+    // Bay St: Bloor → King
+    waypoints:[
+      [-79.38500, 43.67000],
+      [-79.38480, 43.66300],
+      [-79.38460, 43.65600],
+      [-79.38440, 43.64900],
+      [-79.38410, 43.64500],
+    ]
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  OSRM ROUTING  — public OSRM demo server, free, no key needed
+//  Fetches real road geometry between waypoints
+// ═══════════════════════════════════════════════════════════════════════════
+async function fetchOSRMRoute(waypoints) {
+  // Build coordinate string:  lon,lat;lon,lat;...
+  const coords = waypoints.map(w => `${w[0]},${w[1]}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}`
+            + `?overview=full&geometries=geojson&steps=false`;
+
+  const res  = await fetch(url);
+  const data = await res.json();
+
+  if (data.code !== 'Ok' || !data.routes || !data.routes[0]) {
+    throw new Error('OSRM returned no route');
   }
+
+  // GeoJSON coords are [lon, lat] — flip to [lat, lon] for Leaflet
+  return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MAP SETUP
+// ═══════════════════════════════════════════════════════════════════════════
+const map = L.map('map', { zoomControl:true }).setView([43.6540, -79.3900], 14);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 20,
+}).addTo(map);
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  TRUCK STATE  — holds the real road path + animation cursor per truck
+// ═══════════════════════════════════════════════════════════════════════════
+const truckState    = {};  // id → { path:[[lat,lon],...], cursor, speed, status, streetName }
+const markers       = {};
+const trailLines    = {};
+const routeLines    = {};
+let   selectedId    = null;
+
+const STATUSES = ['available','available','busy','busy','full'];
+
+function pillClass(s) { return s==='available'?'pill-available':s==='busy'?'pill-busy':'pill-full'; }
+function statusColor(s){ return s==='available'?'#3fb950':s==='busy'?'#d29922':'#f85149'; }
+
+// ─── Reverse-geocode street name via Nominatim (best-effort) ─────────────
+const streetCache = {};
+async function getStreetName(lat, lon) {
+  const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+  if (streetCache[key]) return streetCache[key];
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=17`,
+      { headers: { 'Accept-Language': 'en' } });
+    const d = await r.json();
+    const road = d.address?.road || d.address?.pedestrian || 'Unknown St';
+    streetCache[key] = road;
+    return road;
+  } catch { return 'Unknown St'; }
+}
+
+// ─── Build icon ───────────────────────────────────────────────────────────
+function makeIcon(def, state) {
+  const col = def.color;
+  return L.divIcon({
+    className: '',
+    html: `<div class="truck-marker-wrap">
+      <div class="truck-dot" style="background:${col}20;border-color:${col};box-shadow:0 0 14px ${col}60">
+        <span style="filter:drop-shadow(0 0 3px ${col})">${def.emoji}</span>
+      </div>
+      <div class="truck-label" style="color:${col};border:1px solid ${col}55">${def.id}</div>
+    </div>`,
+    iconSize:   [64, 52],
+    iconAnchor: [32, 20],
+    popupAnchor:[0, -22],
+  });
+}
+
+function popupHTML(def, state) {
+  const pos = state.path[state.cursor] || state.path[0];
+  return `<div class="popup-inner">
+    <div class="popup-header">
+      <span class="popup-icon">${def.emoji}</span>
+      <div>
+        <div class="popup-id" style="color:${def.color}">${def.id}</div>
+        <span class="status-pill ${pillClass(state.status)}">${state.status}</span>
+      </div>
+    </div>
+    <div class="popup-rows">
+      <div class="popup-row"><span class="popup-label">SPEED</span>
+        <span class="popup-value spd">${state.speed} km/h</span></div>
+      <div class="popup-row"><span class="popup-label">STATUS</span>
+        <span class="popup-value">${state.status.toUpperCase()}</span></div>
+      <div class="popup-row"><span class="popup-label">STREET</span>
+        <span class="popup-value" style="font-size:.62rem;color:var(--muted)">${state.streetName||'…'}</span></div>
+      <div class="popup-row"><span class="popup-label">COORDS</span>
+        <span class="popup-value" style="font-size:.6rem">${pos[0].toFixed(5)}, ${pos[1].toFixed(5)}</span></div>
+    </div>
+  </div>`;
+}
+
+// ─── Init marker for a truck once its route is loaded ────────────────────
+function initTruckMarker(def) {
+  const state = truckState[def.id];
+  const pos   = state.path[0];
+
+  const m = L.marker(pos, { icon: makeIcon(def, state), zIndexOffset:500 }).addTo(map);
+  m.bindPopup(popupHTML(def, state), { maxWidth:240, className:'' });
+  m.on('click', () => { selectedId = def.id; highlightCard(def.id); });
+  markers[def.id] = m;
+
+  // Faint full-route guide line
+  routeLines[def.id] = L.polyline(state.path, {
+    color: def.color, weight:2, opacity:.18, dashArray:'4,4'
+  }).addTo(map);
+
+  // Bold trail that grows as truck moves
+  trailLines[def.id] = L.polyline([pos], {
+    color: def.color, weight:3.5, opacity:.75
+  }).addTo(map);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ANIMATION LOOP  — one setInterval per truck, independent speed
+// ═══════════════════════════════════════════════════════════════════════════
+function startTruckAnimation(def) {
+  const state = truckState[def.id];
+
+  // Slow cleaning pace — each truck ticks every 600–900ms (like 10–15 km/h)
+  const tickMs = 600 + Math.random() * 300;
+
+  setInterval(() => {
+    if (!state.path.length) return;
+
+    // Advance cursor
+    state.cursor = (state.cursor + 1) % state.path.length;
+    const pos = state.path[state.cursor];
+
+    // Update marker position
+    markers[def.id].setLatLng(pos);
+    markers[def.id].setIcon(makeIcon(def, state));
+    if (markers[def.id].isPopupOpen()) {
+      markers[def.id].setPopupContent(popupHTML(def, state));
+    }
+
+    // Grow trail, trim to last 80 pts
+    const tll = trailLines[def.id].getLatLngs();
+    tll.push(pos);
+    if (tll.length > 80) tll.shift();
+    trailLines[def.id].setLatLngs(tll);
+
+    // Vary speed slightly — cleaning pace 8–18 km/h
+    state.speed = Math.max(8, Math.min(18, state.speed + (Math.random()-.5)*2));
+
+    // Update street name every ~20 steps (async, non-blocking)
+    if (state.cursor % 20 === 0) {
+      getStreetName(pos[0], pos[1]).then(name => { state.streetName = name; });
+    }
+
+  }, tickMs);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SIDEBAR
+// ═══════════════════════════════════════════════════════════════════════════
+function highlightCard(id) {
+  document.querySelectorAll('.truck-card').forEach(c => c.classList.remove('active'));
+  const el = document.getElementById('card-'+id);
+  if (el) el.classList.add('active');
+}
+
+function updateSidebar() {
+  let avail=0, busy=0, full=0;
+  TRUCK_DEFS.forEach(def => {
+    const s = truckState[def.id];
+    if (!s) return;
+    if (s.status==='available') avail++;
+    else if (s.status==='busy') busy++;
+    else full++;
+
+    const pos = s.path[s.cursor] || s.path[0] || [0,0];
+    let card = document.getElementById('card-'+def.id);
+    if (!card) {
+      card = document.createElement('div');
+      card.className = 'truck-card';
+      card.id = 'card-'+def.id;
+      document.getElementById('truck-list').appendChild(card);
+    }
+    if (selectedId===def.id) card.classList.add('active');
+    card.innerHTML = `
+      <div class="truck-avatar" style="background:${def.color}22;border:1.5px solid ${def.color}66">${def.emoji}</div>
+      <div class="truck-info">
+        <div class="truck-id" style="color:${def.color}">${def.id}</div>
+        <div class="truck-street">${s.streetName||'Loading…'}</div>
+      </div>
+      <div class="truck-right">
+        <div class="speed-val">${Math.round(s.speed)}<span class="speed-unit"> km/h</span></div>
+        <div class="status-pill ${pillClass(s.status)}">${s.status}</div>
+      </div>`;
+    card.onclick = () => {
+      selectedId = def.id;
+      highlightCard(def.id);
+      map.setView(pos, 16, { animate:true });
+      markers[def.id]?.openPopup();
+    };
+  });
+  document.getElementById('cnt-available').textContent = avail;
+  document.getElementById('cnt-busy').textContent      = busy;
+  document.getElementById('cnt-full').textContent      = full;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  LOG
+// ═══════════════════════════════════════════════════════════════════════════
+function log(msg, cls='log-ok') {
+  const el   = document.getElementById('api-log');
+  const now  = new Date().toLocaleTimeString('en-CA',{hour12:false});
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-ts">[${now}]</span><span class="${cls}">${msg}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  while (el.children.length > 80) el.removeChild(el.firstChild);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  BOOT  — fetch all OSRM routes on load, then start animations
+// ═══════════════════════════════════════════════════════════════════════════
+async function boot() {
+  const total  = TRUCK_DEFS.length;
+  let   loaded = 0;
+
+  const setProgress = (n, msg) => {
+    document.getElementById('loading-bar').style.width = (n/total*100)+'%';
+    document.getElementById('loading-status').textContent = msg;
+  };
+
+  log('Fetching real road routes via OSRM…', 'log-info');
+
+  // Fetch all routes in parallel
+  await Promise.all(TRUCK_DEFS.map(async def => {
+    try {
+      const path = await fetchOSRMRoute(def.waypoints);
+      truckState[def.id] = {
+        path,
+        cursor:     Math.floor(Math.random() * path.length),  // stagger start
+        speed:      Math.round(8 + Math.random()*10),
+        status:     STATUSES[Math.floor(Math.random()*STATUSES.length)],
+        streetName: 'Loading…',
+      };
+      // Seed street name for initial position
+      const pos = path[truckState[def.id].cursor];
+      getStreetName(pos[0], pos[1]).then(n => { truckState[def.id].streetName = n; });
+
+      loaded++;
+      setProgress(loaded, `Loaded ${def.id} — ${path.length} road points`);
+      log(`✓ ${def.id} · ${path.length} waypoints via OSRM`);
+    } catch(e) {
+      // Fallback: use raw waypoints if OSRM fails
+      const path = def.waypoints.map(w => [w[1], w[0]]);
+      truckState[def.id] = {
+        path, cursor:0,
+        speed:25, status:'available', streetName:'Offline mode'
+      };
+      loaded++;
+      setProgress(loaded, `${def.id} used fallback (OSRM unavailable)`);
+      log(`⚠ ${def.id} · OSRM failed, using fallback`, 'log-err');
+    }
+  }));
+
+  // Init all markers
+  TRUCK_DEFS.forEach(def => initTruckMarker(def));
+
+  // Start independent animation loops
+  TRUCK_DEFS.forEach(def => startTruckAnimation(def));
+
+  // Sidebar refresh loop
+  setInterval(updateSidebar, 500);
+  updateSidebar();
+
+  // Countdown display
+  let cd = 4;
+  setInterval(() => {
+    cd = cd <= 0 ? 4 : cd - 1;
+    document.getElementById('countdown').textContent = cd;
+  }, 1000);
+
+  // Hide loading screen
+  document.getElementById('loading-overlay').style.display = 'none';
+  log(`🚛 All 10 trucks on real roads. Ready!`, 'log-info');
+}
+
+boot();
 </script>
 </body>
 </html>
